@@ -1,0 +1,15 @@
+{
+  "gmail": {
+    "email": "your-email@gmail.com",
+    "app_password": "your-app-specific-password"
+  },
+  "google_sheets": {
+    "service_account_file": "google_credentials.json"
+  },
+  "todoist": {
+    "api_token": "your-todoist-api-token"
+  },
+  "groq": {
+    "api_key": "your-groq-api-key"
+  }
+}

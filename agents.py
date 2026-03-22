@@ -11,6 +11,7 @@ import urllib.request
 import urllib.parse
 from datetime import datetime
 from groq import Groq
+from tools import execute_automation_now, schedule_automation, start_automation_engine, check_automation_triggers
 
 MODEL = "llama-3.3-70b-versatile"
 FAST  = "llama-3.1-8b-instant"
@@ -278,25 +279,44 @@ def run_oracle(prompt: str, context: str, api_key: str) -> dict:
 # ─────────────────────────────────────────────────────────────────
 # AUTOMATION ENGINE
 # ─────────────────────────────────────────────────────────────────
-AUTOMATION_SYSTEM = """You are ARIA's automation engine. A user describes an automation they want to set up. You design it precisely.
+AUTOMATION_SYSTEM = """You are ARIA's automation engine. A user describes an automation they want to set up. You design it precisely with executable details.
 
 Respond ONLY with valid JSON:
 {
   "automation_name": "short name",
   "description": "what this automation does",
   "trigger": {
-    "event": "what triggers it",
+    "event": "what triggers it (new email|scheduled time|webhook|manual)",
     "tool": "which tool/platform",
-    "condition": "optional condition"
+    "condition": "optional condition for triggering",
+    "schedule": "for scheduled: 'every monday at 8am' or 'daily at 9am'"
   },
   "steps": [
-    {"step": 1, "action": "what happens", "tool": "which tool", "details": "specifics", "delay": "immediate|X minutes|X hours"}
+    {
+      "step": 1,
+      "action": "specific executable action",
+      "tool": "gmail|sheets|calendar|tasks",
+      "details": {
+        "to": "email@example.com",
+        "subject": "Email subject",
+        "body": "Email content",
+        "content": "task description",
+        "spreadsheet_id": "google_sheet_id",
+        "sheet_name": "Sheet1",
+        "row_data": ["col1", "col2", "col3"],
+        "summary": "meeting title",
+        "start_time": "2024-01-01T10:00:00",
+        "end_time": "2024-01-01T11:00:00"
+      },
+      "delay": "immediate|5 minutes|1 hour"
+    }
   ],
   "estimated_time_saved": "X hours/week",
   "complexity": "Simple|Moderate|Complex",
-  "status": "active",
-  "tools_required": ["list of tools needed"],
-  "setup_instructions": ["step by step to set this up in real tools"]
+  "status": "ready_to_execute",
+  "tools_required": ["gmail", "sheets", "calendar", "tasks"],
+  "setup_instructions": ["step by step to set this up in real tools"],
+  "execution_ready": true
 }"""
 
 
@@ -311,3 +331,23 @@ def create_automation(prompt: str, api_key: str) -> dict:
         temperature=0.3, max_tokens=1200,
     )
     return _parse(resp.choices[0].message.content)
+
+
+def execute_automation(automation: dict) -> dict:
+    """Execute an automation immediately"""
+    return execute_automation_now(automation)
+
+
+def schedule_automation_execution(automation: dict, schedule_time: str) -> str:
+    """Schedule an automation to run at specific times"""
+    return schedule_automation(automation, schedule_time)
+
+
+def start_automation_scheduler():
+    """Start the automation scheduler"""
+    return start_automation_engine()
+
+
+def check_for_triggers():
+    """Check for automation triggers"""
+    check_automation_triggers()

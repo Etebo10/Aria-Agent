@@ -2,7 +2,7 @@ import streamlit as st
 import json
 import os
 from datetime import datetime
-from agents import run_nova, run_ledger, run_herald, run_ops, run_oracle, create_automation
+from agents import run_nova, run_ledger, run_herald, run_ops, run_oracle, create_automation, execute_automation, schedule_automation_execution, start_automation_scheduler, check_for_triggers
 
 st.set_page_config(page_title="ARIA — Business OS", page_icon="◎", layout="wide")
 
@@ -736,9 +736,15 @@ PHOTOS = {
 for k, v in [
     ("api_key", ""), ("biz_context", ""), ("active_agent", "nova"),
     ("results", {}), ("automations", []), ("chat_history", {}),
+    ("automation_executions", []), ("scheduled_automations", {}),
 ]:
     if k not in st.session_state:
         st.session_state[k] = v
+
+# Start automation scheduler
+if "scheduler_started" not in st.session_state:
+    start_automation_scheduler()
+    st.session_state.scheduler_started = True
 
 def get_result(agent: str):
     return st.session_state.results.get(agent)
@@ -802,6 +808,8 @@ with st.sidebar:
         st.session_state.results = {}
         st.session_state.automations = []
         st.session_state.chat_history = {}
+        st.session_state.automation_executions = []
+        st.session_state.scheduled_automations = {}
         st.rerun()
 
 # ── HEADER ────────────────────────────────────────────────────────────────────
@@ -1213,6 +1221,74 @@ with tab_auto:
               {steps_html}
               <div style="margin-top:8px">{tools_req}</div>
             </div>""", unsafe_allow_html=True)
+
+            # Execution controls
+            col_exec1, col_exec2, col_exec3 = st.columns([1,1,2])
+            with col_exec1:
+                if st.button("▶️ Run Now", key=f"run_{i}", use_container_width=True):
+                    with st.spinner("Executing automation..."):
+                        result = execute_automation(aut)
+                        st.session_state.automation_executions.insert(0, result)
+                        if result['success']:
+                            st.success(f"✅ {aut['automation_name']} executed successfully!")
+                        else:
+                            st.error(f"❌ Execution failed: {result['errors']}")
+                        st.rerun()
+
+            with col_exec2:
+                schedule_trigger = aut.get('trigger', {}).get('schedule')
+                if schedule_trigger:
+                    if st.button("⏰ Schedule", key=f"schedule_{i}", use_container_width=True):
+                        automation_id = schedule_automation_execution(aut, schedule_trigger)
+                        st.session_state.scheduled_automations[automation_id] = aut
+                        st.success(f"📅 Scheduled: {schedule_trigger}")
+                        st.rerun()
+
+            with col_exec3:
+                if st.button("🔍 View Results", key=f"results_{i}", use_container_width=True):
+                    # Show execution history for this automation
+                    exec_history = [e for e in st.session_state.automation_executions
+                                  if e.get('automation_name') == aut.get('automation_name')]
+                    if exec_history:
+                        st.markdown("**Recent Executions:**")
+                        for exec_result in exec_history[:3]:  # Show last 3
+                            status_icon = "✅" if exec_result['success'] else "❌"
+                            st.markdown(f"- {status_icon} {exec_result['executed_at'][:19]}")
+                    else:
+                        st.info("No execution history yet")
+
+        # Automation Execution Results
+        if st.session_state.automation_executions:
+            st.markdown('<div style="height:2rem"></div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="font-size:0.72rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px"><i class="fa fa-history"></i> Execution History ({len(st.session_state.automation_executions)})</div>', unsafe_allow_html=True)
+
+            for exec_result in st.session_state.automation_executions[:5]:  # Show last 5
+                status_color = "var(--green)" if exec_result['success'] else "var(--red)"
+                status_icon = "✅" if exec_result['success'] else "❌"
+                steps_completed = len([s for s in exec_result.get('steps_executed', []) if s.get('success')])
+
+                st.markdown(f"""
+                <div class="result-section" style="border-left-color:{status_color};margin-bottom:12px">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                    <div style="font-size:0.85rem;font-weight:600;color:var(--text)">{status_icon} {exec_result.get('automation_name','Unknown')}</div>
+                    <div style="font-size:0.7rem;color:var(--text3)">{exec_result['executed_at'][:19]}</div>
+                  </div>
+                  <div style="font-size:0.75rem;color:var(--text2);margin-bottom:4px">Steps completed: {steps_completed}/{len(exec_result.get('steps_executed',[]))}</div>
+                  {"<div style='font-size:0.7rem;color:" + status_color + "'>" + str(exec_result.get('errors',[])) + "</div>" if not exec_result['success'] else ""}
+                </div>""", unsafe_allow_html=True)
+
+        # Trigger Check Button
+        st.markdown('<div style="height:1rem"></div>', unsafe_allow_html=True)
+        col_check1, col_check2 = st.columns([1,3])
+        with col_check1:
+            if st.button("🔄 Check Triggers", use_container_width=True):
+                with st.spinner("Checking for automation triggers..."):
+                    check_for_triggers()
+                    st.success("✅ Trigger check complete!")
+        with col_check2:
+            scheduled_count = len(st.session_state.scheduled_automations)
+            if scheduled_count > 0:
+                st.markdown(f'<div style="font-size:0.75rem;color:var(--text3);padding-top:8px"><i class="fa fa-clock"></i> {scheduled_count} automation(s) scheduled</div>', unsafe_allow_html=True)
     else:
         st.markdown("""
         <div style="text-align:center;padding:2.5rem;background:var(--card);border:1px solid var(--border);border-radius:14px;margin-top:1rem">
